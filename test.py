@@ -1,5 +1,6 @@
-from icrawler.builtin import GoogleImageCrawler
+import streamlit as st
 import os
+from icrawler.builtin import GoogleImageCrawler
 import cv2
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
@@ -28,7 +29,7 @@ def apply_augmentation(image_path, save_dir, augment_options):
     # Dictionary of augmentation functions
     augmentation_functions = {
         # Original augmentations
-        "blur": lambda img: cv2.GaussianBlur(img, (18, 18), 0),  # Apply Gaussian Blur
+        "blur": lambda img: cv2.GaussianBlur(img, (35, 35), 0),  # Apply Gaussian Blur
         "saturation": lambda img: ImageEnhance.Color(img).enhance(random.uniform(0.5, 2.5)),  # Adjust Saturation
         "brightness": lambda img: ImageEnhance.Brightness(img).enhance(random.uniform(1.5, 4.5)),  # Adjust Brightness
         "rotation": lambda img: img.rotate(random.choice([90, 180, 270])),  # Random Rotation
@@ -67,7 +68,7 @@ def apply_augmentation(image_path, save_dir, augment_options):
         # Noise additions
         "gaussian_noise": lambda img: cv2.add(
             cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR) if isinstance(img, Image.Image) else img,
-            np.random.normal(0, random.uniform(5, 25), img.shape if isinstance(img, np.ndarray) else np.array(img).shape).astype(np.uint8)
+            np.random.normal(0, random.uniform(15, 35), img.shape if isinstance(img, np.ndarray) else np.array(img).shape).astype(np.uint8)
         ),
         "salt_pepper_noise": lambda img: add_salt_pepper_noise(
             cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR) if isinstance(img, Image.Image) else img
@@ -79,7 +80,7 @@ def apply_augmentation(image_path, save_dir, augment_options):
         "emboss": lambda img: img.filter(ImageFilter.EMBOSS),  # Emboss
         "median_blur": lambda img: cv2.medianBlur(
             cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR) if isinstance(img, Image.Image) else img, 
-            ksize=random.choice([3, 5, 7])
+            ksize=random.choice([9, 14, 18])
         ),
         
         # Occlusion techniques
@@ -89,6 +90,7 @@ def apply_augmentation(image_path, save_dir, augment_options):
         # Weather/environmental simulations
         "fog": lambda img: add_fog(np.array(img) if isinstance(img, Image.Image) else img),
         "rain": lambda img: add_rain(np.array(img) if isinstance(img, Image.Image) else img),
+        #
         
         # Resolution modifications
         "jpeg_compression": lambda img: compress_jpeg(img),
@@ -97,7 +99,6 @@ def apply_augmentation(image_path, save_dir, augment_options):
             Image.NEAREST
         ).resize((img.width, img.height), Image.NEAREST),
     }
-
     # Apply only selected augmentations
     for aug, enabled in augment_options.items():
         if enabled:  # Check if user enabled the augmentation
@@ -140,7 +141,7 @@ def apply_augmentation(image_path, save_dir, augment_options):
                 print(f"⚠️ Error applying {aug} to {img_name}: {e}")
 
 # Helper functions for advanced augmentations
-def add_salt_pepper_noise(image, salt_prob=0.01, pepper_prob=0.01):
+def add_salt_pepper_noise(image, salt_prob=0.05, pepper_prob=0.05):
     noisy_image = np.copy(image)
     # Add salt noise
     salt_mask = np.random.random(image.shape[:2]) < salt_prob
@@ -238,6 +239,59 @@ def compress_jpeg(image):
     
     return compressed_image
 
+def add_sunflare(image):
+    # Simulate a sunflare effect by adding random spots of brightness
+    flare_intensity = random.uniform(0.5, 1.5)
+    width, height = image.size
+    img_array = np.array(image)
+    
+    for _ in range(random.randint(3, 5)):
+        x = random.randint(0, width)
+        y = random.randint(0, height)
+        radius = random.randint(20, 50)
+        
+        for i in range(x-radius, x+radius):
+            for j in range(y-radius, y+radius):
+                if 0 <= i < width and 0 <= j < height:
+                    dist = np.sqrt((i-x)**2 + (j-y)**2)
+                    if dist < radius:
+                        img_array[j, i] = np.clip(img_array[j, i] + random.randint(0, int(flare_intensity * 255)), 0, 255)
+    
+    return Image.fromarray(img_array)
+
+def add_snow(image):
+    # Simulate snow by adding random white spots
+    width, height = image.size
+    img_array = np.array(image)
+    
+    for _ in range(random.randint(1000, 3000)):
+        x = random.randint(0, width)
+        y = random.randint(0, height)
+        img_array[y, x] = [255, 255, 255]
+    
+    return Image.fromarray(img_array)
+
+def apply_mixed_augmentation(img):
+    # Apply all augmentations in sequence for a mixed augmentation
+    augmentations = [
+        "blur", "saturation", "brightness", "rotation", "resizing", 
+        "black_white", "flip_horizontal", "flip_vertical", 
+        "random_crop", "shear", "perspective", "contrast", 
+        "hue", "solarize", "posterize", "equalize", 
+        "gaussian_noise", "salt_pepper_noise", "edge_enhance", "sharpen", 
+        "emboss", "median_blur", "random_erase", "cutout", 
+        "fog", "rain", "sunflare", "snow", "jpeg_compression", "pixelate"
+    ]
+    for aug in augmentations:
+        img = apply_augmentation_single(img, aug)
+    return img
+
+def apply_augmentation_single(img, aug):
+    # Apply the individual augmentation to an image
+    # This method would simply call the corresponding augmentation function
+    pass
+
+
 # Function to download images
 def download_images(search_term, num_images, folder_name, augment_options):
     save_dir = os.path.join(folder_name, search_term.replace(" ", "_"))
@@ -253,63 +307,64 @@ def download_images(search_term, num_images, folder_name, augment_options):
         img_path = os.path.join(save_dir, img_file)
         apply_augmentation(img_path, save_dir, augment_options)
 
-# Main function
+
+# Streamlit UI
 def main():
-    folder_name = input("📂 Enter the name for the main download folder: ")
-    os.makedirs(folder_name, exist_ok=True)
+    st.set_page_config(layout="wide")
+    st.title('Image Augmentation with Streamlit')
 
-    search_term = input("📸 Enter the image name you want: ")
-    num_images = int(input(f"🔢 How many images of '{search_term}'? "))
+    folder_name = st.text_input("📂 Enter the name for the main download folder:", "Images")
+    search_term = st.text_input("📸 Enter the image name you want:", "cat")
+    num_images = st.number_input(f"🔢 How many images of '{search_term}'?", min_value=1, max_value=100, value=10)
 
-    # Full list of augmentation options
+    st.write("### Augmentation Options")
+
+    # Layout for checkboxes in rows of 5 columns
+    col1, col2, col3, col4, col5 = st.columns(5)
     augment_options = {
-        # Original augmentations
-        "blur": input("🔄 Augmentation Blur (Y/N): ").strip().lower() == "y",
-        "saturation": input("🎨 Augmentation Saturation (Y/N): ").strip().lower() == "y",
-        "brightness": input("💡 Augmentation Brightness (Y/N): ").strip().lower() == "y",
-        "rotation": input("🔄 Augmentation Rotation (Y/N): ").strip().lower() == "y",
-        "resizing": input("📏 Augmentation Resizing (Y/N): ").strip().lower() == "y",
-        "black_white": input("⚫⚪ Augmentation Black & White (Y/N): ").strip().lower() == "y",
-        
-        # Geometric transformations
-        "flip_horizontal": input("↔️ Augmentation Horizontal Flip (Y/N): ").strip().lower() == "y",
-        "flip_vertical": input("↕️ Augmentation Vertical Flip (Y/N): ").strip().lower() == "y",
-        "random_crop": input("✂️ Augmentation Random Crop (Y/N): ").strip().lower() == "y",
-        "shear": input("↗️ Augmentation Shear (Y/N): ").strip().lower() == "y",
-        "perspective": input("🔲 Augmentation Perspective Transform (Y/N): ").strip().lower() == "y",
-        
-        # Color transformations
-        "contrast": input("⚖️ Augmentation Contrast (Y/N): ").strip().lower() == "y",
-        "hue": input("🌈 Augmentation Hue Shift (Y/N): ").strip().lower() == "y",
-        "solarize": input("🌞 Augmentation Solarize (Y/N): ").strip().lower() == "y",
-        "posterize": input("🖼️ Augmentation Posterize (Y/N): ").strip().lower() == "y",
-        "equalize": input("📊 Augmentation Histogram Equalization (Y/N): ").strip().lower() == "y",
-        
-        # Noise additions
-        "gaussian_noise": input("🔍 Augmentation Gaussian Noise (Y/N): ").strip().lower() == "y",
-        "salt_pepper_noise": input("🧂 Augmentation Salt & Pepper Noise (Y/N): ").strip().lower() == "y",
-        
-        # Filtering operations
-        "edge_enhance": input("📏 Augmentation Edge Enhancement (Y/N): ").strip().lower() == "y",
-        "sharpen": input("✨ Augmentation Sharpen (Y/N): ").strip().lower() == "y",
-        "emboss": input("🔖 Augmentation Emboss (Y/N): ").strip().lower() == "y",
-        "median_blur": input("🌫️ Augmentation Median Blur (Y/N): ").strip().lower() == "y",
-        
-        # Occlusion techniques
-        "random_erase": input("❌ Augmentation Random Erase (Y/N): ").strip().lower() == "y",
-        "cutout": input("✂️ Augmentation Cutout (Y/N): ").strip().lower() == "y",
-        
-        # Weather/environmental simulations
-        "fog": input("🌫️ Augmentation Fog Effect (Y/N): ").strip().lower() == "y",
-        "rain": input("🌧️ Augmentation Rain Effect (Y/N): ").strip().lower() == "y",
-        
-        # Resolution modifications
-        "jpeg_compression": input("📉 Augmentation JPEG Compression (Y/N): ").strip().lower() == "y",
-        "pixelate": input("🔍 Augmentation Pixelate (Y/N): ").strip().lower() == "y",
+        "blur": col1.checkbox("Blur", value=True),
+        "saturation": col2.checkbox("Saturation", value=True),
+        "brightness": col3.checkbox("Brightness", value=True),
+        "rotation": col4.checkbox("Rotation", value=True),
+        "resizing": col5.checkbox("Resizing", value=True),
+
+        "black_white": col1.checkbox("Black & White", value=True),
+        "flip_horizontal": col2.checkbox("Horizontal Flip", value=True),
+        "flip_vertical": col3.checkbox("Vertical Flip", value=True),
+        "random_crop": col4.checkbox("Random Crop", value=True),
+        "shear": col5.checkbox("Shear", value=True),
+
+        "perspective": col1.checkbox("Perspective Transform", value=True),
+        "contrast": col2.checkbox("Contrast", value=True),
+        "hue": col3.checkbox("Hue Shift", value=True),
+        "solarize": col4.checkbox("Solarize", value=True),
+        "posterize": col5.checkbox("Posterize", value=True),
+
+        "equalize": col1.checkbox("Histogram Equalization", value=True),
+        "gaussian_noise": col2.checkbox("Gaussian Noise", value=True),
+        "salt_pepper_noise": col3.checkbox("Salt & Pepper Noise", value=True),
+        "edge_enhance": col4.checkbox("Edge Enhancement", value=True),
+        "sharpen": col5.checkbox("Sharpen", value=True),
+
+        "emboss": col1.checkbox("Emboss", value=True),
+        "median_blur": col2.checkbox("Median Blur", value=True),
+        "random_erase": col3.checkbox("Random Erase", value=True),
+        "cutout": col4.checkbox("Cutout", value=True),
+        "fog": col5.checkbox("Fog Effect", value=True),
+
+        "rain": col1.checkbox("Rain Effect", value=True),
+        "sunflare": col2.checkbox("Sunflare Effect", value=True),
+        "snow": col3.checkbox("Snow Effect", value=True),
+        "jpeg_compression": col4.checkbox("JPEG Compression", value=True),
+        "pixelate": col5.checkbox("Pixelate", value=True),
+
+        "mixed": col1.checkbox("Mixed Augmentation", value=True)
     }
 
-    download_images(search_term, num_images, folder_name, augment_options)
+    if st.button("Download and Apply Augmentations"):
+        download_images(search_term, num_images, folder_name, augment_options)
+        st.success("✅ Images Downloaded and Augmentations Applied!")
+
 
 if __name__ == "__main__":
     main()
-        
